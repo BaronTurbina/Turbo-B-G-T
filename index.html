@@ -31,7 +31,7 @@ button{border:1px solid #ff39bd;border-radius:13px;padding:11px 13px;font-size:1
 <label id="lockPassLabel">Hasło / PIN</label><input id="pass" type="password" autocomplete="new-password">
 <div class="actions"><button id="unlockBtn" onclick="unlock()">Odblokuj</button></div><div style="margin-top:12px"><button type="button" id="resetPinBtn" class="secondary" onclick="resetPinAndApp()" style="background:linear-gradient(90deg,#64205e,#34205f);border-color:#ffae43">Nie pamiętam PIN-u — resetuj aplikację</button></div><div id="lockmsg" class="small"></div>
 </div></div>
-<div class="app" id="app" style="display:none"><section class="hero" id="top"><div class="toprow"><div><div class="brand">Turbo <span>Budżet</span> <small style="font-size:16px;color:#ff9df0">v18</small></div><div class="tagline" id="tagline">PLANUJ • KONTROLUJ • REALIZUJ</div></div><div class="topicons"><button class="iconbtn" onclick="openEditMonth()">⚙</button><button class="iconbtn" aria-label="Otwórz menu" onclick="openDrawer()">☰</button></div></div><div id="monthArea"></div></section><div id="empty" class="card" style="display:none;text-align:center;padding:30px"><span id="emptyText">Brak miesiąca.</span><br><br><button id="emptyAddBtn" onclick="openMonth()">Dodaj miesiąc po wypłacie</button></div><details class="card summary" id="summaryPanel"><summary id="summaryTitle">📊 Podsumowania miesięcy / lat / tygodni</summary><div id="summaryContent" class="small" style="margin-top:12px"></div></details><nav class="bottomnav"><button onclick="scrollTopApp()"><span class="navicon">⌂</span><span id="navStart">Start</span></button><button onclick="openIncome()"><span class="navicon">▣</span><span id="navIncome">Wpłata</span></button><button onclick="openExpense()"><span class="navicon">▤</span><span id="navExpense">Wydatek</span></button><button onclick="toggleSummary()"><span class="navicon">◔</span><span id="navSummary">Podsum.</span></button><button onclick="scrollToTabs()"><span class="navicon">▣</span><span id="navMonths">Miesiące</span></button><button onclick="openEditMonth()"><span class="navicon">⚙</span><span id="navOptions">Ustawienia</span></button></nav></div>
+<div class="app" id="app" style="display:none"><section class="hero" id="top"><div class="toprow"><div><div class="brand">Turbo <span>Budżet</span> <small style="font-size:16px;color:#ff9df0">v19</small></div><div class="tagline" id="tagline">PLANUJ • KONTROLUJ • REALIZUJ</div></div><div class="topicons"><button class="iconbtn" onclick="openEditMonth()">⚙</button><button class="iconbtn" aria-label="Otwórz menu" onclick="openDrawer()">☰</button></div></div><div id="monthArea"></div></section><div id="empty" class="card" style="display:none;text-align:center;padding:30px"><span id="emptyText">Brak miesiąca.</span><br><br><button id="emptyAddBtn" onclick="openMonth()">Dodaj miesiąc po wypłacie</button></div><details class="card summary" id="summaryPanel"><summary id="summaryTitle">📊 Podsumowania miesięcy / lat / tygodni</summary><div id="summaryContent" class="small" style="margin-top:12px"></div></details><nav class="bottomnav"><button onclick="scrollTopApp()"><span class="navicon">⌂</span><span id="navStart">Start</span></button><button onclick="openIncome()"><span class="navicon">▣</span><span id="navIncome">Wpłata</span></button><button onclick="openExpense()"><span class="navicon">▤</span><span id="navExpense">Wydatek</span></button><button onclick="toggleSummary()"><span class="navicon">◔</span><span id="navSummary">Podsum.</span></button><button onclick="scrollToTabs()"><span class="navicon">▣</span><span id="navMonths">Miesiące</span></button><button onclick="openEditMonth()"><span class="navicon">⚙</span><span id="navOptions">Ustawienia</span></button></nav></div>
 <div class="modal" id="monthModal"><div class="sheet"><div class="row"><h2 id="newPayTitle">Nowa wypłata</h2><button class="secondary" onclick="closeModal('monthModal')">✕</button></div>
 <label id="mMonthLabel">Miesiąc</label><select id="mMonth"></select>
 <label id="mYearLabel">Rok</label><select id="mYear"></select>
@@ -364,14 +364,18 @@ function dynamicBudget(m,w){
   return st ? st.nominal : 0;
 }
 function currentPeriod(m){
- // Porównujemy całe dni, a nie godziny. Granice okresów są zapisywane
- // jako północ, więc poprzedni kod zwracał null przez większość dnia.
- const dayStart=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
- const today=dayStart(new Date());
- return (m.periods||[]).find(p=>{
-   const start=new Date(p.startISO), end=new Date(p.endISO);
-   return today>=dayStart(start)&&today<=dayStart(end);
- })||null;
+ // Wybieraj tydzień po lokalnej dacie (bez pułapek strefy czasowej ISO).
+ // Jeśli wybrany cykl jeszcze się nie rozpoczął, pokaż jego pierwszy tydzień;
+ // jeśli cykl już minął, pokaż ostatni tydzień, zamiast pustej kwoty 0 zł.
+ const periods=(m.periods||[]).slice().sort((a,b)=>a.week-b.week);
+ if(!periods.length)return null;
+ const today=new Date(); today.setHours(0,0,0,0);
+ const localDay=iso=>{const d=new Date(iso);return new Date(d.getFullYear(),d.getMonth(),d.getDate());};
+ const dated=periods.map(p=>({p,start:localDay(p.startISO),end:localDay(p.endISO)}));
+ const match=dated.find(x=>today>=x.start&&today<=x.end);
+ if(match)return match.p;
+ const prior=dated.filter(x=>x.start<=today);
+ return prior.length?prior[prior.length-1].p:dated[0].p;
 }
 async function addMonth(){
  let mi=+document.getElementById("mMonth").value, year=+document.getElementById("mYear").value;
