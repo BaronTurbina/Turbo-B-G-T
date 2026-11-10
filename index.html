@@ -35,7 +35,7 @@ button{border:1px solid #ff39bd;border-radius:13px;padding:11px 13px;font-size:1
 <div class="modal" id="monthModal"><div class="sheet"><div class="row"><h2 id="newPayTitle">Nowa wypłata</h2><button class="secondary" onclick="closeModal('monthModal')">✕</button></div>
 <label id="mMonthLabel">Miesiąc</label><select id="mMonth"></select>
 <label id="mYearLabel">Rok</label><select id="mYear"></select>
-<label id="mStartLabel">Dzień rozpoczęcia miesiąca budżetowego</label><input id="mStartDay" type="number" min="10" max="10" value="10" disabled>
+<label id="mStartLabel">Dzień rozpoczęcia miesiąca budżetowego</label><input id="mStartDay" type="number" min="1" max="31" value="10" required>
 <div class="notice" id="monthRuleNotice">Tygodnie będą liczone od wybranego dnia jako <b>Tydzień 1, Tydzień 2, Tydzień 3...</b>. Okres kończy się zawsze 10. dnia kolejnego miesiąca.</div>
 <label id="mSalaryLabel">Wypłata</label><input id="mSalary" type="number" step=".01" placeholder="np. 10000">
 <label id="mSaveLabel">Cel oszczędności</label><input id="mSave" type="number" step=".01" value="2000">
@@ -233,6 +233,12 @@ function ensureMonth(m){
   if(m.extraBudget==null)m.extraBudget=0;
   if(m.savingsUsed==null)m.savingsUsed=0;
   if(m.closed==null)m.closed=false;
+  if(m.periodRuleVersion!==2){
+    const parsed=parseMonthName(m.name);
+    m.startDay=Math.max(1,Math.min(31,Number(m.startDay||10)));
+    m.periods=makePeriods(parsed.year,parsed.month,baseSpendBudget(m),m.startDay);
+    m.periodRuleVersion=2;
+  }
   recalcMonth(m);
 }
 function openDrawer(){document.getElementById('drawerBackdrop').style.display='flex';document.body.style.overflow='hidden'}
@@ -315,13 +321,24 @@ function isoWeek(d){
 }
 function datePL(d){return d.toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'})}
 function makePeriods(year,month,total,startDay=10){
-  let start=new Date(year,month,startDay), end=new Date(year,month+1,10), periods=[], cur=new Date(start), n=1;
-  while(cur<end){
-    let ws=new Date(cur), we=new Date(cur); we.setDate(we.getDate()+6); if(we>=end)we=new Date(end.getTime()-86400000);
+  // Cykl zaczyna się w wybranym dniu miesiąca i kończy dzień przed
+  // takim samym dniem kolejnego miesiąca. Pierwszy tydzień kończy się
+  // w najbliższą niedzielę; kolejne biegną od poniedziałku do niedzieli.
+  const clampDay=(y,mo,day)=>Math.min(day,new Date(y,mo+1,0).getDate());
+  const start=new Date(year,month,clampDay(year,month,startDay));
+  const nextMonth=new Date(year,month+1,1);
+  const endExclusive=new Date(nextMonth.getFullYear(),nextMonth.getMonth(),clampDay(nextMonth.getFullYear(),nextMonth.getMonth(),startDay));
+  const periods=[]; let cur=new Date(start), n=1;
+  while(cur<endExclusive){
+    const ws=new Date(cur);
+    const daysToSunday=(7-ws.getDay())%7;
+    let we=new Date(ws); we.setDate(we.getDate()+(n===1?daysToSunday:6));
+    const lastDay=new Date(endExclusive); lastDay.setDate(lastDay.getDate()-1);
+    if(we>lastDay)we=lastDay;
     periods.push({week:n,start:datePL(ws),end:datePL(we),startISO:ws.toISOString(),endISO:we.toISOString()});
-    n++; cur=new Date(we);cur.setDate(cur.getDate()+1);
+    n++; cur=new Date(we); cur.setDate(cur.getDate()+1);
   }
-  let per=periods.length?total/periods.length:0; periods.forEach(p=>p.budget=per); return periods;
+  const per=periods.length?total/periods.length:0; periods.forEach(p=>p.budget=per); return periods;
 }
 function spentForPeriod(m,w){return m.expenses.filter(e=>e.week===w&&e.source!=='savings').reduce((a,e)=>a+e.amount,0)}
 function weekStatuses(m){
@@ -379,6 +396,9 @@ function currentPeriod(m){
 }
 async function addMonth(){
  let mi=+document.getElementById("mMonth").value, year=+document.getElementById("mYear").value;
+ let startDay=+document.getElementById("mStartDay").value||10;
+ const maxDay=new Date(year,mi+1,0).getDate();
+ if(startDay<1||startDay>maxDay)return alert(`Wybierz dzień od 1 do ${maxDay} dla wybranego miesiąca.`);
  let months=["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"];
  let name=months[mi]+" "+year,salary=+document.getElementById("mSalary").value||0,saving=+document.getElementById("mSave").value||0,fixed=+document.getElementById("mFixed").value||0;
  if(!salary)return alert("Wpisz wypłatę.");
@@ -387,8 +407,8 @@ async function addMonth(){
  let carry=(prev&&prev.rolloverMode==="2"&&prev.carryForward)?prev.carryForward:0;
  state.pool+=(saving);
  let total=Math.max(0,salary-saving-fixed+carry);
- let startDay=10, periods=makePeriods(year,mi,total,startDay);
- let m={id:Date.now(),name,salary,saving,fixed,totalBudget:total,carryIn:carry,startDay,startDate:`${year}-${String(mi+1).padStart(2,"0")}-${String(startDay).padStart(2,"0")}`,extraBudget:0,fixedItems:[{id:Date.now()+1,name:"Czynsz",amount:fixed},{id:Date.now()+2,name:"Garaż",amount:0}],incomes:[],periods,expenses:[],closed:false,rollover:0,rolloverMode:null,carryForward:0,savingsUsed:0};
+ let periods=makePeriods(year,mi,total,startDay);
+ let m={id:Date.now(),name,salary,saving,fixed,totalBudget:total,carryIn:carry,startDay,periodRuleVersion:2,startDate:`${year}-${String(mi+1).padStart(2,"0")}-${String(startDay).padStart(2,"0")}`,extraBudget:0,fixedItems:[{id:Date.now()+1,name:"Czynsz",amount:fixed},{id:Date.now()+2,name:"Garaż",amount:0}],incomes:[],periods,expenses:[],closed:false,rollover:0,rolloverMode:null,carryForward:0,savingsUsed:0};
  state.months.unshift(m);currentMonth=m.id;await save();closeModal("monthModal")
 }
 const CATEGORY_ICONS={
