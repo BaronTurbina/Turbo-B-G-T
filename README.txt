@@ -15,3 +15,6 @@ Wersja aplikacji: v1.0. Wypłatę miesięczną można edytować przyciskiem „E
 
 
 Aktualizacja v1.2: przy dodawaniu wpłaty można wybrać oszczędności albo budżet bieżącego miesiąca. Wpłatę do budżetu można rozłożyć równo na tygodnie lub przypisać do wybranego tygodnia. Wpłata przypisana do tygodnia zwiększa jego limit; wpłata równa zwiększa limity wszystkich tygodni o równą część.
+
+
+Wersja 1.3 – poprawki rozliczeń wpłat: dodatkowe wpłaty budżetowe są uwzględniane w tygodniowych i miesięcznych limitach, nie są podwójnie liczone dla starszych wpisów bez alokacji, zmniejszają zapotrzebowanie na oszczędności po przekroczeniu budżetu, a zamknięcie miesiąca uwzględnia wszystkie wpłaty budżetowe. Zmieniono identyfikator cache Service Workera.
