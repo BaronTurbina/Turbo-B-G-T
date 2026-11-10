@@ -12,3 +12,6 @@ Uwaga: nie wgrywaj samego index.html — potrzebne są także grafiki, manifest,
 
 
 Wersja aplikacji: v1.0. Wypłatę miesięczną można edytować przyciskiem „Edytuj wypłatę miesięczną / budżet” na panelu głównym lub przez ikonę ustawień. Zmiana zapisuje nową kwotę dla wybranego miesiąca i przelicza budżet.
+
+
+Aktualizacja v1.2: przy dodawaniu wpłaty można wybrać oszczędności albo budżet bieżącego miesiąca. Wpłatę do budżetu można rozłożyć równo na tygodnie lub przypisać do wybranego tygodnia. Wpłata przypisana do tygodnia zwiększa jego limit; wpłata równa zwiększa limity wszystkich tygodni o równą część.

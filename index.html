@@ -68,8 +68,18 @@ button{border:1px solid #ff39bd;border-radius:13px;padding:11px 13px;font-size:1
 <div class="row"><h2 id="incomeTitle">Dodaj wpłatę</h2><button class="secondary" onclick="closeModal('incomeModal')">✕</button></div>
 <label id="iAmountLabel">Kwota</label><input id="iAmount" type="number" step=".01" placeholder="np. 500">
 <label id="iDescLabel">Opis</label><input id="iDesc" placeholder="np. premia">
-<label id="iModeLabel">Co zrobić z wpłatą?</label><select id="iMode"><option id="iBudgetOpt" value="budget">Dodaj do budżetu bieżącego miesiąca</option><option id="iSaveOpt" value="saving">Dodaj do oszczędności</option></select>
-<div class="notice" id="incomeNotice">Dodatkowa wpłata do budżetu zwiększy środki na pozostałe tygodnie, zamiast zmieniać już zaksięgowane wydatki.</div>
+<label id="iModeLabel">Co zrobić z wpłatą?</label><select id="iMode" onchange="toggleIncomeMode()"><option id="iBudgetOpt" value="budget">Dodaj do budżetu bieżącego miesiąca</option><option id="iSaveOpt" value="saving">Dodaj do oszczędności</option></select>
+<div id="budgetAllocation" style="display:none">
+<label for="iAllocation">Jak rozdysponować wpłatę w budżecie?</label>
+<select id="iAllocation" onchange="toggleIncomeWeek()">
+<option value="even">Rozłóż po równo na wszystkie tygodnie miesiąca</option>
+<option value="week">Dodaj do konkretnego tygodnia</option>
+</select>
+<div id="incomeWeekWrap" style="display:none;margin-top:10px">
+<label for="iWeek">Wybierz tydzień</label><select id="iWeek"></select>
+</div>
+</div>
+<div class="notice" id="incomeNotice">Wybierz, czy wpłata ma zasilić oszczędności, czy budżet. W budżecie możesz rozłożyć ją równo na tygodnie albo przypisać do jednego tygodnia.</div>
 <div class="actions"><button id="iSaveBtn" onclick="addIncome()">Zapisz wpłatę</button></div>
 </div></div>
 
@@ -288,12 +298,34 @@ async function addFixed(){
 async function delFixed(id){
  let m=state.months.find(x=>x.id===currentMonth);m.fixedItems=m.fixedItems.filter(x=>x.id!==id);recalcMonth(m);await save();renderFixed();
 }
-function openIncome(){document.getElementById("iAmount").value="";document.getElementById("iDesc").value="";document.getElementById("incomeModal").style.display="flex"}
+function openIncome(){
+ document.getElementById("iAmount").value="";document.getElementById("iDesc").value="";
+ const m=state.months.find(x=>x.id===currentMonth);ensureMonth(m);
+ const weekSel=document.getElementById("iWeek");weekSel.innerHTML=(m.periods||[]).map(p=>`<option value="${p.week}">Tydzień ${p.week} · ${p.start} – ${p.end}</option>`).join("");
+ document.getElementById("iMode").value="budget";document.getElementById("iAllocation").value="even";toggleIncomeMode();toggleIncomeWeek();
+ document.getElementById("incomeModal").style.display="flex";
+}
+function toggleIncomeMode(){
+ const mode=document.getElementById("iMode").value;
+ document.getElementById("budgetAllocation").style.display=mode==="budget"?"block":"none";
+}
+function toggleIncomeWeek(){
+ document.getElementById("incomeWeekWrap").style.display=document.getElementById("iAllocation").value==="week"?"block":"none";
+}
 async function addIncome(){
- let m=state.months.find(x=>x.id===currentMonth),amount=+document.getElementById("iAmount").value||0,desc=document.getElementById("iDesc").value.trim()||"Dodatkowa wpłata",mode=document.getElementById("iMode").value;
+ let m=state.months.find(x=>x.id===currentMonth),amount=+document.getElementById("iAmount").value||0,desc=document.getElementById("iDesc").value.trim()||"Dodatkowa wpłata",mode=document.getElementById("iMode").value,allocation=document.getElementById("iAllocation").value,week=Number(document.getElementById("iWeek").value)||1;
  if(amount<=0)return alert("Podaj kwotę.");
- ensureMonth(m);m.incomes.push({id:Date.now(),amount,desc,date:new Date().toLocaleDateString("pl-PL"),mode});
- if(mode==="saving")state.pool+=amount;else{m.extraBudget=(m.extraBudget||0)+amount;recalcMonth(m)}
+ ensureMonth(m);
+ const income={id:Date.now(),amount,desc,date:new Date().toLocaleDateString("pl-PL"),mode};
+ if(mode==="saving"){
+   income.destination="savings";state.pool=Number(state.pool||0)+amount;
+ }else{
+   income.destination="budget";income.allocation=allocation;
+   if(allocation==="week")income.week=week;
+   // Wpłata budżetowa jest osobnym przydziałem tygodniowym, nie zmienia wypłaty bazowej.
+ }
+ m.incomes.push(income);
+ if(mode!=="saving")recalcMonth(m);
  await save();closeModal("incomeModal");
 }
 function openMonth(){
@@ -349,7 +381,12 @@ function weekStatuses(m){
 
   // Najpierw liczmy rzeczywiste saldo każdego tygodnia.
   periods.forEach(p=>{
-    const nominal=Number(p.budget||0);
+    const baseNominal=Number(p.budget||0);
+    const periodAdds=(m.incomes||[]).filter(i=>i.mode==="budget"||i.destination==="budget").reduce((sum,i)=>{
+      if(i.allocation==="week")return sum+(Number(i.week)===Number(p.week)?Number(i.amount||0):0);
+      return sum+(Number(i.amount||0)/(periods.length||1));
+    },0);
+    const nominal=baseNominal+periodAdds;
     const spent=spentForPeriod(m,p.week);
     const raw=nominal-spent;
     out[p.week]={nominal,effective:nominal,spent,over:Math.max(0,-raw),left:Math.max(0,raw),transferredIn:0,transferredOut:0};
